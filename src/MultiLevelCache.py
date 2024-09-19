@@ -1,3 +1,4 @@
+import threading
 from Cache import Cache
 
 class MultiLevelCache:
@@ -16,31 +17,28 @@ class MultiLevelCache:
 
     def get(self, key: str) -> str:
         with self.lock:
-            for cache in self.cache_levels:
+            # Check from highest priority (L1) to lowest (Ln)
+            for i, cache in enumerate(self.cache_levels):
                 result = cache.get(key)
                 if result is not None:
-                    self._promote_to_higher_levels(key, result)
+                    # Promote the item to L1
+                    for j in range(i, 0, -1):
+                        self.cache_levels[j - 1].put(key, result)
                     return result
-            return None
+            return None  # Cache miss
 
     def put(self, key: str, value: str):
         with self.lock:
             if self.cache_levels:
+                # Always insert into L1
                 self.cache_levels[0].put(key, value)
-                if len(self.cache_levels) > 1:
-                    self._handle_promotion(key, value)
 
     def _handle_promotion(self, key: str, value: str):
         for i in range(1, len(self.cache_levels)):
-            result = self.cache_levels[i].get(key)
-            if result is not None:
-                self.cache_levels[i - 1].put(key, result)
-                return
-
-    def _promote_to_higher_levels(self, key: str, value: str):
-        for i in range(len(self.cache_levels) - 1, 0, -1):
             if self.cache_levels[i].get(key) is not None:
                 self.cache_levels[i - 1].put(key, value)
+                self.cache_levels[i].remove(key)  # Remove from lower level
+                return
 
     def display_cache(self):
         for i, cache in enumerate(self.cache_levels):
